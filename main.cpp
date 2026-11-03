@@ -6,7 +6,7 @@ using namespace std;
 const int FILAS = 200;
 const int COLS = 200;
 
-// 1. Molde de lo que viene en el archivo binario (.dat)
+// 1. Molde de cada registro en el archivo binario (.dat)
 struct OrdenArchivo {
     int x = 0;
     int y = 0;
@@ -20,7 +20,7 @@ struct OrdenArchivo {
     int siguientey = 0;
 };
 
-// 2. Molde de cada casillero en la memoria RAM del dron
+// 2. Molde de cada casillero en la memoria RAM del dron (Matriz 200x200)
 struct Orden {
     unsigned int espera = 0;
     bool soltarGranada1 = false;
@@ -44,12 +44,12 @@ bool sonAledanas(int x1, int y1, int x2, int y2) {
     return (distX <= 1 && distY <= 1) && !(distX == 0 && distY == 0);
 }
 
-// Verifica que una coordenada este dentro de la matriz de 200x200
+// Verifica que una coordenada este dentro de los limites de la matriz (0 a 199)
 bool dentroDelMapa(int x, int y) {
     return (x >= 0 && x < FILAS && y >= 0 && y < COLS);
 }
 
-// Lectura de enteros a prueba de letras, simbolos o entradas vacias
+// Lectura de enteros a prueba de letras o simbolos que limpia el buffer
 int leerEntero(const char *mensaje) {
     int valor;
     cout << mensaje;
@@ -62,7 +62,7 @@ int leerEntero(const char *mensaje) {
     return valor;
 }
 
-// Lectura de enteros acotada entre un minimo y un maximo
+// Lectura de enteros validando un rango minimo y maximo
 int leerEnteroRango(const char *mensaje, int minVal, int maxVal) {
     int valor;
     do {
@@ -74,12 +74,24 @@ int leerEnteroRango(const char *mensaje, int minVal, int maxVal) {
     return valor;
 }
 
+// Lectura de tiempo de espera validando que no sea negativo
+unsigned int leerEspera(const char *mensaje) {
+    int valor;
+    do {
+        valor = leerEntero(mensaje);
+        if (valor < 0) {
+            cout << "  [Error] El tiempo de espera no puede ser negativo (ingrese 0 o mas)." << endl;
+        }
+    } while (valor < 0);
+    return (unsigned int)valor;
+}
+
 // Lectura estricta para valores booleanos (solo acepta 0 o 1)
 bool leerBool(const char *mensaje) {
     return leerEnteroRango(mensaje, 0, 1) == 1;
 }
 
-// Lee rutas de archivo evitando que el usuario presione ENTER en blanco
+// Lee nombres o rutas de archivo evitando entradas vacias o desbordes
 void leerRuta(const char *mensaje, char ruta[260]) {
     do {
         cout << mensaje;
@@ -103,7 +115,7 @@ void pedirSiguienteValido(int actualX, int actualY, int &sigX, int &sigY) {
         sigY = leerEnteroRango("Siguiente Y (0 a 199): ", 0, COLS - 1);
 
         if (!sonAledanas(actualX, actualY, sigX, sigY)) {
-            cout << "  [Error] Movimiento invalido: Debe moverse a una celda vecina a (" << actualX << "," << actualY << ")." << endl;
+            cout << "  [Error] Movimiento invalido: Debe ser una celda vecina a (" << actualX << "," << actualY << ")." << endl;
         } else {
             valido = true;
         }
@@ -145,7 +157,7 @@ bool cargarArchivoEnMemoria(char rutaArchivo[], Orden memoriaDron[FILAS][COLS]) 
         return false;
     }
 
-    // Matriz temporal estatica para no agotar la Pila (Stack) ni ensuciar la RAM si el archivo es invalido
+    // Matriz temporal estatica para no agotar la Pila (Stack) ni alterar la RAM si el archivo falla
     static Orden temp[FILAS][COLS];
     for (int i = 0; i < FILAS; i++) {
         for (int j = 0; j < COLS; j++) {
@@ -202,12 +214,17 @@ bool cargarArchivoEnMemoria(char rutaArchivo[], Orden memoriaDron[FILAS][COLS]) 
     }
     fclose(f);
 
+    if (totalRegistros == 0) {
+        cout << "Error de validacion: El archivo esta vacio." << endl;
+        return false;
+    }
+
     if (cantDespegues != 1 || cantFin != 1) {
         cout << "Error de validacion: La ruta debe tener exactamente 1 despegue y 1 final (aterrizaje o kamikaze)." << endl;
         return false;
     }
 
-    // Seguimiento de la ruta desde el despegue para validar contigüidad y ausencia de bucles
+    // Seguimiento de la ruta paso a paso para verificar conexion continua y ausencia de bucles
     static bool visitado[FILAS][COLS];
     for (int i = 0; i < FILAS; i++) {
         for (int j = 0; j < COLS; j++) {
@@ -392,10 +409,7 @@ void crearArchivoNuevo() {
             r.ataqueKamikaze = false;
             r.soltarGranada1 = false;
             r.soltarGranada2 = false;
-
-            int esperaAux;
-            do { esperaAux = leerEntero("Espera (0 o mas): "); } while (esperaAux < 0);
-            r.espera = (unsigned int)esperaAux;
+            r.espera = leerEspera("Espera (0 o mas): ");
 
             do {
                 pedirSiguienteValido(r.x, r.y, r.siguientex, r.siguientey);
@@ -428,10 +442,7 @@ void crearArchivoNuevo() {
                 }
             }
 
-            int esperaAux;
-            do { esperaAux = leerEntero("Espera (0 o mas): "); } while (esperaAux < 0);
-            r.espera = (unsigned int)esperaAux;
-
+            r.espera = leerEspera("Espera (0 o mas): ");
             r.soltarGranada1 = leerBool("Soltar Granada 1 (1=Si, 0=No): ");
             r.soltarGranada2 = leerBool("Soltar Granada 2 (1=Si, 0=No): ");
 
@@ -491,14 +502,10 @@ void corregirRegistroArchivo() {
                  << " | Siguiente: (" << r.siguientex << "," << r.siguientey << ")" << endl;
 
             cout << "\n--- INGRESE NUEVOS DATOS ---" << endl;
-            cout << "[!] Nota: Despegue, Aterrizaje y Kamikaze estan protegidos para no romper la estructura." << endl;
-
-            int espAux;
-            do { espAux = leerEntero("Nueva espera (0 o mas): "); } while (espAux < 0);
-            r.espera = (unsigned int)espAux;
+            r.espera = leerEspera("Nueva espera (0 o mas): ");
 
             if (r.despegue) {
-                cout << "[!] Celda de Despegue: No se permiten ataques con granadas." << endl;
+                cout << "[!] Celda de Despegue: No se permiten ataques ni aterrizaje aqui." << endl;
                 r.soltarGranada1 = false;
                 r.soltarGranada2 = false;
             } else {
@@ -506,8 +513,18 @@ void corregirRegistroArchivo() {
                 r.soltarGranada2 = leerBool("Soltar Granada 2 (1=Si, 0=No): ");
             }
 
-            if (!r.aterrizaje && !r.ataqueKamikaze) {
-                pedirSiguienteValido(r.x, r.y, r.siguientex, r.siguientey);
+            // Si es la celda final, permite alternar entre Kamikaze y Aterrizaje sin perder el fin de ruta
+            if (r.aterrizaje || r.ataqueKamikaze) {
+                cout << "[!] Esta es la celda de FIN DE MISION." << endl;
+                r.ataqueKamikaze = leerBool("Modo de fin (1=Ataque Kamikaze, 0=Aterrizaje): ");
+                r.aterrizaje = !r.ataqueKamikaze;
+                r.siguientex = 0;
+                r.siguientey = 0;
+            } else {
+                cout << "Siguiente actual: (" << r.siguientex << ", " << r.siguientey << ")" << endl;
+                if (leerBool("Desea cambiar la coordenada siguiente? (1=Si, 0=No): ")) {
+                    pedirSiguienteValido(r.x, r.y, r.siguientex, r.siguientey);
+                }
             }
 
             fseek(f, -(long)sizeof(OrdenArchivo), SEEK_CUR);
@@ -515,7 +532,7 @@ void corregirRegistroArchivo() {
             fflush(f);
 
             cout << "Exito: Registro actualizado en el disco duro." << endl;
-            cout << "AVISO: Si desea ver este cambio reflejado en el sistema, vuelva a cargar el archivo (Opcion 1)." << endl;
+            cout << "AVISO: Para ver este cambio reflejado en el sistema, vuelva a cargar el archivo (Opcion 1)." << endl;
             break;
         }
     }
@@ -550,14 +567,10 @@ void corregirRegistroMemoria(Orden memoriaDron[FILAS][COLS]) {
          << " | Siguiente: (" << memoriaDron[x][y].siguientex << "," << memoriaDron[x][y].siguientey << ")" << endl;
 
     cout << "\n--- INGRESE NUEVOS DATOS ---" << endl;
-    cout << "[!] Nota: Despegue, Aterrizaje y Kamikaze estan protegidos." << endl;
-
-    int espAux;
-    do { espAux = leerEntero("Nueva espera (0 o mas): "); } while (espAux < 0);
-    memoriaDron[x][y].espera = (unsigned int)espAux;
+    memoriaDron[x][y].espera = leerEspera("Nueva espera (0 o mas): ");
 
     if (memoriaDron[x][y].despegue) {
-        cout << "[!] Celda de Despegue: No se permiten ataques con granadas." << endl;
+        cout << "[!] Celda de Despegue: No se permiten ataques ni aterrizaje aqui." << endl;
         memoriaDron[x][y].soltarGranada1 = false;
         memoriaDron[x][y].soltarGranada2 = false;
     } else {
@@ -565,8 +578,31 @@ void corregirRegistroMemoria(Orden memoriaDron[FILAS][COLS]) {
         memoriaDron[x][y].soltarGranada2 = leerBool("Soltar Granada 2 (1=Si, 0=No): ");
     }
 
-    if (!memoriaDron[x][y].aterrizaje && !memoriaDron[x][y].ataqueKamikaze) {
-        pedirSiguienteValido(x, y, memoriaDron[x][y].siguientex, memoriaDron[x][y].siguientey);
+    if (memoriaDron[x][y].aterrizaje || memoriaDron[x][y].ataqueKamikaze) {
+        cout << "[!] Esta es la celda de FIN DE MISION." << endl;
+        memoriaDron[x][y].ataqueKamikaze = leerBool("Modo de fin (1=Ataque Kamikaze, 0=Aterrizaje): ");
+        memoriaDron[x][y].aterrizaje = !memoriaDron[x][y].ataqueKamikaze;
+        memoriaDron[x][y].siguientex = 0;
+        memoriaDron[x][y].siguientey = 0;
+    } else {
+        cout << "Siguiente paso actual: (" << memoriaDron[x][y].siguientex << ", " << memoriaDron[x][y].siguientey << ")" << endl;
+        if (leerBool("Desea redirigir el siguiente paso a otra celda activa? (1=Si, 0=No): ")) {
+            int nuevoSigX, nuevoSigY;
+            bool pasoValido = false;
+            do {
+                pedirSiguienteValido(x, y, nuevoSigX, nuevoSigY);
+                if (!memoriaDron[nuevoSigX][nuevoSigY].ocupado) {
+                    cout << "  [Error] La celda (" << nuevoSigX << "," << nuevoSigY << ") esta vacia en RAM. Debe apuntar a una celda ocupada." << endl;
+                } else if (memoriaDron[nuevoSigX][nuevoSigY].despegue) {
+                    cout << "  [Error] No puede volver a apuntar a la celda de Despegue." << endl;
+                } else {
+                    pasoValido = true;
+                }
+            } while (!pasoValido);
+
+            memoriaDron[x][y].siguientex = nuevoSigX;
+            memoriaDron[x][y].siguientey = nuevoSigY;
+        }
     }
 
     cout << "Exito: Registro actualizado en memoria RAM." << endl;
@@ -733,4 +769,3 @@ int main() {
 
     return 0;
 }
-
